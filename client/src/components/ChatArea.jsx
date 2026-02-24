@@ -1,18 +1,31 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { Send, Phone, Video, MoreVertical, Smile, Check, CheckCheck } from 'lucide-react'
+import { Send, Phone, Video, MoreVertical, Smile, Check, CheckCheck, Image, X } from 'lucide-react'
 import { createNewMessage, getAllMessages } from '../API_Calls/message.js'
 import { hideLoader, showLoader } from '../redux/loaderSlice.js'
 import moment from 'moment'
 import { clearUnreadMessage } from '../API_Calls/chat.js'
 import { setAllChats } from '../redux/userSlice.js'
+import toast from 'react-hot-toast'
+import Store from '../redux/store.js'
+import { useSocket } from '../context/SocketContext.jsx'
+import { SOCKET_EVENTS } from '../constants/socketEvents.js'
+import EmojiPicker from 'emoji-picker-react'
+
 const ChatArea = () => {
-  const { selectedChat, user, allChats } = useSelector((state) => state.userReducer)
+  const { selectedChat, user, allChats, onlineUsers } = useSelector((state) => state.userReducer)
   const dispatch = useDispatch();
+  const socket = useSocket();
 
   const [message, setMessage] = useState('');
   const [allMessage, setAllMessage] = useState([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState('');
   const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const emojiPickerRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -21,26 +34,50 @@ const ChatArea = () => {
   const getOtherUser = () => {
     if (!selectedChat || !selectedChat.members || !user) return null
 
-    return selectedChat.members.find(member => member._id !== user._id)
+    return selectedChat.members.find(member => member._id !== user?._id)
   }
 
   const otherUser = getOtherUser()
+  const isOnline = otherUser && user && onlineUsers.includes(otherUser._id)
+
+  const onEmojiClick = (emojiData) => {
+    setMessage(prev => prev + emojiData.emoji);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const sendMessage = async (e) => {
     e.preventDefault();
-    let response = null;
-    dispatch(showLoader());
-    try {
-      const newMessage = {
-        chatId: selectedChat._id,
-        sender: user._id,
-        text: message
-      }
+    if ((!message.trim() && !imageFile) || !socket) return;
 
-      response = await createNewMessage(newMessage)
-      dispatch(hideLoader());
+    try {
+      const formData = new FormData();
+      formData.append('chatId', selectedChat._id);
+      formData.append('sender', user._id);
+      if (message) formData.append('text', message);
+      if (imageFile) formData.append('image', imageFile);
+
+      const response = await createNewMessage(formData)
+
       if (response.success) {
+        socket.emit(SOCKET_EVENTS.SEND_MESSAGE, {
+          ...response.data,
+          members: selectedChat.members.map(a => a._id)
+        })
+
         setMessage('')
+        setImageFile(null)
+        setImagePreview('')
+        setShowEmojiPicker(false)
+
         // Update allChats with the new lastMessage
         const updatedChats = allChats.map((chat) => {
           if (chat._id === selectedChat._id) {
@@ -55,29 +92,30 @@ const ChatArea = () => {
         dispatch(setAllChats(updatedChats))
       }
     } catch (error) {
-      dispatch(hideLoader())
+      toast.error(error.message)
+    }
+  }
 
-
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
     }
   }
 
 
   const allMessages = async () => {
-    let response = null;
-    dispatch(showLoader());
     try {
-
-      response = await getAllMessages(selectedChat._id)
-
-      dispatch(hideLoader());
+      const response = await getAllMessages(selectedChat._id)
       if (response.success) {
         setAllMessage(response.data)
       }
-
     } catch (error) {
-      dispatch(hideLoader())
-
-
     }
   }
 
@@ -95,11 +133,15 @@ const ChatArea = () => {
   }
 
   const clearUnreadMessageCount = async () => {
-    let response = null;
+    if (!socket) return;
     try {
-      dispatch(showLoader())
-      response = await clearUnreadMessage(selectedChat._id)
-      dispatch(hideLoader())
+      socket.emit(SOCKET_EVENTS.CLEAR_UNREAD_MESSAGE, {
+        chatId: selectedChat._id,
+        members: selectedChat.members.map(a => a._id)
+      })
+
+      const response = await clearUnreadMessage(selectedChat._id)
+
       if (response.success) {
         const updatedChats = allChats.map((chat) => {
           if (chat._id === selectedChat._id) {
@@ -110,19 +152,66 @@ const ChatArea = () => {
         dispatch(setAllChats(updatedChats))
       }
     } catch (error) {
-      dispatch(hideLoader())
-
     }
   }
 
-
-
-
-
   useEffect(() => {
+    if (!selectedChat) return;
+
     allMessages();
     clearUnreadMessageCount()
-  }, [selectedChat])
+
+    if (!socket) return;
+
+    const handleReceiveMessage = (data) => {
+      const currentSelectedChat = Store?.getState().userReducer?.selectedChat;
+
+      if (currentSelectedChat?._id === data?.chatId) {
+        setAllMessage(prev => [...prev, data]);
+        if (data.sender !== user?._id) {
+          clearUnreadMessageCount();
+        }
+      }
+    };
+
+    const handleMessageCountCleared = (data) => {
+      const currentSelectedChat = Store.getState()?.userReducer?.selectedChat;
+      const currentAllChats = Store.getState()?.userReducer?.allChats;
+
+      if (currentSelectedChat?._id === data?.chatId) {
+        const updatedChats = currentAllChats.map(chat => {
+          if (chat?._id === data?.chatId) {
+            return { ...chat, unReadMessagesCount: 0 }
+          }
+          return chat
+        })
+        dispatch(setAllChats(updatedChats));
+
+        setAllMessage(prev => {
+          return prev.map(msg => {
+            return { ...msg, read: true }
+          })
+        })
+      }
+    };
+
+    const handleTyping = (data) => {
+      const currentSelectedChat = Store?.getState().userReducer?.selectedChat;
+      if (currentSelectedChat?._id === data.chatId && data.sender !== user?._id) {
+        setIsTyping(data.isTyping);
+      }
+    };
+
+    socket.on(SOCKET_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage);
+    socket.on(SOCKET_EVENTS.MESSAGE_COUNT_CLEARED, handleMessageCountCleared);
+    socket.on(SOCKET_EVENTS.TYPING, handleTyping);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage);
+      socket.off(SOCKET_EVENTS.MESSAGE_COUNT_CLEARED, handleMessageCountCleared);
+      socket.off(SOCKET_EVENTS.TYPING, handleTyping);
+    }
+  }, [selectedChat, socket])
 
   useEffect(() => {
     scrollToBottom();
@@ -151,7 +240,7 @@ const ChatArea = () => {
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white font-bold text-lg shadow-lg">
               {otherUser ? `${otherUser.firstName?.[0] || ''}${otherUser.lastName?.[0] || ''}` : 'U'}
             </div>
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#121212]"></div>
+            <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#121212] ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`}></div>
           </div>
 
           {/* User Info */}
@@ -159,7 +248,11 @@ const ChatArea = () => {
             <h3 className="text-white font-semibold text-lg">
               {otherUser ? `${otherUser.firstName || ''} ${otherUser.lastName || ''}` : 'User'}
             </h3>
-            <p className="text-gray-400 text-sm">Online</p>
+            {isTyping ? (
+              <p className="text-orange-500 text-sm animate-pulse">Typing...</p>
+            ) : (
+              <p className="text-gray-400 text-sm">{isOnline ? 'Online' : 'Offline'}</p>
+            )}
           </div>
         </div>
 
@@ -182,13 +275,16 @@ const ChatArea = () => {
         {/* Sample messages - replace with actual messages from your backend */}
 
         {
-          allMessage.map((msg) => {
+          allMessage.map((msg, index) => {
             const isCurrentUser = msg.sender === user._id;
             if (!isCurrentUser) {
               return (
-                <div key={msg._id} className="flex justify-start">
+                <div key={msg._id || index} className="flex justify-start">
                   <div className="max-w-[70%] bg-[#2A2A2A] rounded-lg rounded-tl-none px-4 py-3 shadow-md">
-                    <p className="text-white text-sm">{msg.text}</p>
+                    {msg.image && (
+                      <img src={msg.image} alt="Sent" className="max-w-full rounded-lg mb-2 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(msg.image, '_blank')} />
+                    )}
+                    {msg.text && <p className="text-white text-sm">{msg.text}</p>}
                     <span className="text-gray-500 text-xs mt-1 block">{formatTime(msg.createdAt)}</span>
                   </div>
                 </div>
@@ -196,10 +292,13 @@ const ChatArea = () => {
             }
             else {
               return (
-                <div key={msg._id} className="flex justify-end">
+                <div key={msg._id || index} className="flex justify-end">
 
                   <div className="max-w-[70%] bg-gradient-to-r from-orange-600 to-orange-700 rounded-lg rounded-tr-none px-4 py-3 shadow-md">
-                    <p className="text-white text-sm">{msg.text}</p>
+                    {msg.image && (
+                      <img src={msg.image} alt="Sent" className="max-w-full rounded-lg mb-2 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(msg.image, '_blank')} />
+                    )}
+                    {msg.text && <p className="text-white text-sm">{msg.text}</p>}
                     <div className="flex items-center justify-end gap-1 mt-1">
                       <span className="text-orange-100 text-xs">{formatTime(msg.createdAt)}</span>
                       {msg.read ? (
@@ -218,23 +317,93 @@ const ChatArea = () => {
       </div>
 
       {/* Message Input Area */}
-      <div className="bg-[#121212] border-t border-[#2A2A2A] px-6 py-4">
+      <div className="bg-[#121212] border-t border-[#2A2A2A] px-6 py-4 relative">
+        {/* Image Preview */}
+        {imagePreview && (
+          <div className="absolute bottom-full left-0 w-full bg-[#121212] border-t border-[#2A2A2A] p-4 flex items-center space-x-4 animate-in slide-in-from-bottom duration-300">
+            <div className="relative group">
+              <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover rounded-lg border border-[#2A2A2A]" />
+              <button
+                type="button"
+                onClick={() => {
+                  setImageFile(null);
+                  setImagePreview('');
+                }}
+                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors"
+                title="Remove image"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex-1">
+              <p className="text-gray-400 text-xs truncate">{imageFile?.name}</p>
+              <p className="text-gray-500 text-[10px]">{(imageFile?.size / 1024).toFixed(1)} KB</p>
+            </div>
+          </div>
+        )}
+
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <div ref={emojiPickerRef} className="absolute bottom-20 left-6 z-50">
+            <EmojiPicker
+              onEmojiClick={onEmojiClick}
+              theme="dark"
+              searchDisabled={false}
+              skinTonesDisabled={true}
+              height={400}
+              width={300}
+            />
+          </div>
+        )}
+
         <form className="flex items-center space-x-3">
           {/* Emoji Button */}
           <button
             type="button"
-            className="p-2 rounded-full hover:bg-gray-800 transition-colors text-gray-400 hover:text-orange-500"
+            className={`p-2 rounded-full transition-colors ${showEmojiPicker ? 'bg-gray-800 text-orange-500' : 'text-gray-400 hover:text-orange-500 hover:bg-gray-800'}`}
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
           >
             <Smile size={22} />
           </button>
+
+          {/* Image Upload Button */}
+          <label className="p-2 rounded-full cursor-pointer transition-colors text-gray-400 hover:text-orange-500 hover:bg-gray-800">
+            <Image size={22} />
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+          </label>
 
           {/* Message Input */}
           <div className="flex-1 relative group">
             <input
               type="text"
-
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                if (socket && selectedChat) {
+                  socket.emit(SOCKET_EVENTS.TYPING, {
+                    chatId: selectedChat._id,
+                    sender: user._id,
+                    members: selectedChat.members.map(m => m._id),
+                    isTyping: true
+                  });
+
+                  if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+                  typingTimeoutRef.current = setTimeout(() => {
+                    socket.emit(SOCKET_EVENTS.TYPING, {
+                      chatId: selectedChat._id,
+                      sender: user._id,
+                      members: selectedChat.members.map(m => m._id),
+                      isTyping: false
+                    });
+                  }, 2000);
+                }
+              }}
               placeholder="Type a message..."
               className="w-full bg-[#2A2A2A] border border-[#2A2A2A] text-white py-3 px-4 rounded-lg focus:outline-none focus:border-orange-500 transition-colors placeholder-gray-500 text-sm"
             />

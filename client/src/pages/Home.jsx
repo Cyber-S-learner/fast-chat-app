@@ -3,9 +3,9 @@ import Header from '../components/Header.jsx'
 import Sidebar from '../components/Sidebar.jsx'
 import ChatArea from '../components/ChatArea.jsx'
 import io from 'socket.io-client'
+import { useEffect } from 'react'
+import { useSelector } from 'react-redux'
 const Home = () => {
-  const socket = io(import.meta.env.VITE_BACKEND_URL)
-
   return (
     <div className="h-screen bg-[#1E1E1E] text-white flex flex-col overflow-hidden">
       <Header />

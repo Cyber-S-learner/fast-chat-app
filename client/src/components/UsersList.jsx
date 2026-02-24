@@ -1,23 +1,28 @@
 import React from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { User, MessageSquare } from 'lucide-react'
-import { createNewChat } from '../API_Calls/chat.js'
+import { clearUnreadMessage, createNewChat } from '../API_Calls/chat.js'
 import { hideLoader, showLoader } from '../redux/loaderSlice.js'
 import { setAllChats, setSelectedChat } from '../redux/userSlice.js'
 import { toast } from 'react-hot-toast'
 import moment from 'moment'
+import { useEffect } from 'react'
+import Store from '../redux/store.js'
 
+
+import { useSocket } from '../context/SocketContext.jsx'
+import { SOCKET_EVENTS } from '../constants/socketEvents.js'
 
 const UsersList = ({ searchKey }) => {
-    const { allUsers, allChats, user: currentUser, selectedChat } = useSelector(state => state.userReducer)
+    const { allUsers, allChats, user: currentUser, selectedChat, onlineUsers } = useSelector(state => state.userReducer)
     const dispatch = useDispatch()
+    const socket = useSocket()
 
     const startNewchat = async (searchUserId) => {
+        if (!currentUser) return;
         let response = null;
         try {
-            dispatch(showLoader())
             response = await createNewChat([currentUser._id, searchUserId]);
-            dispatch(hideLoader())
             if (response.success) {
                 toast.success(response.message)
                 const newChat = response.data;
@@ -27,17 +32,15 @@ const UsersList = ({ searchKey }) => {
             }
             else {
                 toast.error(response.message)
-                dispatch(hideLoader())
-
             }
 
         } catch (error) {
-            dispatch(hideLoader())
 
         }
     }
 
     const openChat = (selectedUserId) => {
+        if (!currentUser) return;
         const chat = allChats.find(chat => chat.members.map(a => a._id).includes(currentUser._id) &&
             chat.members.map(a => a._id).includes(selectedUserId))
 
@@ -47,20 +50,26 @@ const UsersList = ({ searchKey }) => {
     }
 
     const getLastMessage = (userId, chatObj = null) => {
+        if (!currentUser) return "";
         const chat = chatObj || allChats.find(chat => chat.members.map(a => a._id).includes(userId))
 
         if (!chat || !chat.lastMessage) {
             return ""
         }
 
-        if (chat && chat?.lastMessage?.sender == currentUser._id) {
-            return ("You: " + chat?.lastMessage?.text).substring(0, 25)
+        const isMine = chat.lastMessage.sender === currentUser._id;
+        const prefix = isMine ? "You: " : "";
+
+        let messageBody = chat.lastMessage.text || "";
+        if (!messageBody && chat.lastMessage.image) {
+            messageBody = "📷 Photo";
         }
-        else
-            return chat?.lastMessage?.text.substring(0, 25)
+
+        return (prefix + messageBody).substring(0, 25)
     }
 
     const getLastMessageTimeStamp = (userId, chatObj = null) => {
+        if (!currentUser) return "";
         const chat = chatObj || allChats.find(chat => chat.members.map(a => a._id).includes(userId))
         if (!chat || !chat.lastMessage)
             return "";
@@ -70,6 +79,8 @@ const UsersList = ({ searchKey }) => {
 
 
     const getData = () => {
+        if (!currentUser) return [];
+
         // 1. Get and sort all chats by most recent activity
         const sortedChats = [...allChats].sort((a, b) => {
             const dateA = a.lastMessage ? new Date(a.lastMessage.createdAt) : new Date(a.updatedAt);
@@ -115,6 +126,41 @@ const UsersList = ({ searchKey }) => {
         return [...filteredChats, ...matchingNewUsers]
     }
 
+    useEffect(() => {
+        if (!socket || !currentUser) return;
+
+        const handleReceiveMessage = (message) => {
+            const selectedChat = Store.getState().userReducer.selectedChat;
+            const allChats = Store.getState().userReducer.allChats;
+
+            // Update the chat in allChats with the new message and potentially update unread count
+            const updatedChats = allChats.map(chat => {
+                if (chat._id === message.chatId) {
+                    return {
+                        ...chat,
+                        unReadMessagesCount: (selectedChat?._id !== message.chatId && message.sender !== currentUser?._id)
+                            ? (chat?.unReadMessagesCount || 0) + 1
+                            : (chat?.unReadMessagesCount || 0),
+                        lastMessage: message
+                    }
+                }
+                return chat
+            });
+
+            // Move the updated chat to the top of the list
+            const latestChat = updatedChats.find(chat => chat?._id === message.chatId);
+            const otherChats = updatedChats.filter(chat => chat?._id !== message.chatId);
+
+            dispatch(setAllChats([latestChat, ...otherChats]));
+        };
+
+        socket.on(SOCKET_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage);
+
+        return () => {
+            socket.off(SOCKET_EVENTS.RECEIVE_MESSAGE, handleReceiveMessage);
+        };
+    }, [socket, allChats, selectedChat, currentUser])
+
 
     const data = getData()
 
@@ -136,6 +182,8 @@ const UsersList = ({ searchKey }) => {
                     const isSelected = selectedChat && selectedChat.members &&
                         selectedChat.members.map(m => m._id).includes(user._id)
 
+                    const isOnline = onlineUsers.includes(user._id);
+
                     return (
                         <div
                             onClick={() => openChat(user._id)}
@@ -153,14 +201,19 @@ const UsersList = ({ searchKey }) => {
                             )}
 
                             {/* Avatar */}
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold shrink-0 ${isSelected
-                                ? 'bg-orange-600/30 border-orange-600/50 text-orange-400'
-                                : 'bg-orange-600/10 border-orange-600/20 text-orange-500'
-                                } border border-[#2A2A2A]`}>
-                                {user.profilePic ? (
-                                    <img src={user.profilePic} alt={user.firstName} className="w-full h-full rounded-full object-cover" />
-                                ) : (
-                                    <span className="text-lg">{user.firstName?.[0]?.toUpperCase() + user.lastName?.[0]?.toUpperCase() || <User size={20} />}</span>
+                            <div className="relative">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold shrink-0 ${isSelected
+                                    ? 'bg-orange-600/30 border-orange-600/50 text-orange-400'
+                                    : 'bg-orange-600/10 border-orange-600/20 text-orange-500'
+                                    } border border-[#2A2A2A]`}>
+                                    {user.profilePic ? (
+                                        <img src={user.profilePic} alt={user.firstName} className="w-full h-full rounded-full object-cover" />
+                                    ) : (
+                                        <span className="text-lg">{user.firstName?.[0]?.toUpperCase() + user.lastName?.[0]?.toUpperCase() || <User size={20} />}</span>
+                                    )}
+                                </div>
+                                {isOnline && (
+                                    <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#1E1E1E] group-hover:border-[#2A2A2A]"></div>
                                 )}
                             </div>
 
