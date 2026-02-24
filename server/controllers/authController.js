@@ -14,11 +14,10 @@ const signUpController = async (req, res) => {
             })
         }
 
-        if(req.body.password.length < 8)
-        {
+        if (req.body.password.length < 8) {
             return res.status(400).json({
-                message : "password should be minimum of 8 length character",
-                success : false
+                message: "password should be minimum of 8 length character",
+                success: false
             })
         }
 
@@ -72,4 +71,15 @@ const loginController = async (req, res) => {
     }
 }
 
-export { signUpController, loginController };
+const logoutController = async (req, res) => {
+    try {
+        res.status(200).json({
+            message: "user logged out successfully",
+            success: true
+        })
+    } catch (error) {
+        res.status(400).json(tryErrorHandler(error))
+    }
+}
+
+export { signUpController, loginController, logoutController };

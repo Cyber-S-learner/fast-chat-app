@@ -5,7 +5,9 @@ import tryErrorHandler from '../handlers/try-errorHandler.js';
 const authMiddleware = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-        if (!authHeader) return res.status(401).json({ message: "No token" });
+        if (!authHeader) {
+            return res.status(401).json({ message: "No token" });
+        }
 
         const token = authHeader.split(" ")[1];
 
@@ -13,12 +15,11 @@ const authMiddleware = async (req, res, next) => {
             return res.status(400).json({
                 message: 'your are not logged in',
                 success: false
-            }
-            )
+            })
         }
 
-        const decodedToken = jwt.verify(token, process.env.SECRET_KEY)
-    
+        const decodedToken = jwt.verify(token, process.env.SECRET_KEY);
+
         const user = await User.findById(decodedToken.userId).select('-__v');
 
         if (!user) {
@@ -28,12 +29,10 @@ const authMiddleware = async (req, res, next) => {
             })
         }
 
-        
-
         req.user = user;
-
         next()
     } catch (error) {
+        console.error("AuthMiddleware Error:", error.message);
         res.status(400).json(
             tryErrorHandler(error)
         )
