@@ -70,7 +70,7 @@ const ChatArea = () => {
       if (response.success) {
         socket.emit(SOCKET_EVENTS.SEND_MESSAGE, {
           ...response.data,
-          members: selectedChat.members.map(a => a._id)
+          members: selectedChat?.members?.map(a => a?._id)
         })
 
         setMessage('')
@@ -111,7 +111,7 @@ const ChatArea = () => {
 
   const allMessages = async () => {
     try {
-      const response = await getAllMessages(selectedChat._id)
+      const response = await getAllMessages(selectedChat?._id)
       if (response.success) {
         setAllMessage(response.data)
       }
@@ -136,11 +136,11 @@ const ChatArea = () => {
     if (!socket) return;
     try {
       socket.emit(SOCKET_EVENTS.CLEAR_UNREAD_MESSAGE, {
-        chatId: selectedChat._id,
-        members: selectedChat.members.map(a => a._id)
+        chatId: selectedChat?._id,
+        members: selectedChat?.members?.map(a => a?._id)
       })
 
-      const response = await clearUnreadMessage(selectedChat._id)
+      const response = await clearUnreadMessage(selectedChat?._id)
 
       if (response.success) {
         const updatedChats = allChats.map((chat) => {
@@ -197,7 +197,7 @@ const ChatArea = () => {
 
     const handleTyping = (data) => {
       const currentSelectedChat = Store?.getState().userReducer?.selectedChat;
-      if (currentSelectedChat?._id === data.chatId && data.sender !== user?._id) {
+      if (currentSelectedChat?._id === data?.chatId && data?.sender !== user?._id) {
         setIsTyping(data.isTyping);
       }
     };
@@ -276,7 +276,7 @@ const ChatArea = () => {
 
         {
           allMessage.map((msg, index) => {
-            const isCurrentUser = msg.sender === user._id;
+            const isCurrentUser = msg?.sender === user?._id;
             if (!isCurrentUser) {
               return (
                 <div key={msg._id || index} className="flex justify-start">
@@ -386,9 +386,9 @@ const ChatArea = () => {
                 setMessage(e.target.value);
                 if (socket && selectedChat) {
                   socket.emit(SOCKET_EVENTS.TYPING, {
-                    chatId: selectedChat._id,
-                    sender: user._id,
-                    members: selectedChat.members.map(m => m._id),
+                    chatId: selectedChat?._id,
+                    sender: user?._id,
+                    members: selectedChat?.members?.map(m => m?._id),
                     isTyping: true
                   });
 
@@ -396,9 +396,9 @@ const ChatArea = () => {
 
                   typingTimeoutRef.current = setTimeout(() => {
                     socket.emit(SOCKET_EVENTS.TYPING, {
-                      chatId: selectedChat._id,
-                      sender: user._id,
-                      members: selectedChat.members.map(m => m._id),
+                      chatId: selectedChat?._id,
+                      sender: user?._id,
+                      members: selectedChat?.members?.map(m => m?._id),
                       isTyping: false
                     });
                   }, 2000);

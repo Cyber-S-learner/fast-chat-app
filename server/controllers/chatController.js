@@ -20,7 +20,7 @@ const createNewChat = async (req, res) => {
 
 const getAllChats = async (req, res) => {
     try {
-        const allChats = await Chat.find({ members: { $in: req.user._id } }).select('-__v')
+        const allChats = await Chat.find({ members: { $in: req?.user?._id } }).select('-__v')
             .populate('members').populate('lastMessage')
 
 
@@ -34,31 +34,30 @@ const getAllChats = async (req, res) => {
     }
 }
 
-export const clearUnreadMessage = async(req,res)=>{
+export const clearUnreadMessage = async (req, res) => {
     try {
         const chatId = req.body.chatId
         const chat = await Chat.findById(chatId)
-        if(!chat)
-        {
+        if (!chat) {
             return res.status(400).json({
-                message : 'Chat does not exist',
-                success : false
+                message: 'Chat does not exist',
+                success: false
             })
         }
 
-        const udpatedChat = await Chat.findByIdAndUpdate(chatId,{unReadMessagesCount:0},{new : true})
-        .populate('members')
-        .populate('lastMessage')
-        await Message.updateMany({chatId:chatId,read:false},{read:true})
+        const udpatedChat = await Chat.findByIdAndUpdate(chatId, { unReadMessagesCount: 0 }, { new: true })
+            .populate('members')
+            .populate('lastMessage')
+        await Message.updateMany({ chatId: chatId, read: false }, { read: true })
 
         res.send({
-            message:'unread message count updated successfully',
-            success :true,
+            message: 'unread message count updated successfully',
+            success: true,
             data: udpatedChat
         })
-        
+
     } catch (error) {
-         res.status(400).json(tryErrorHandler(error))
+        res.status(400).json(tryErrorHandler(error))
     }
 }
 

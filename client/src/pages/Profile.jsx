@@ -75,8 +75,8 @@ const Profile = () => {
                 <div className="relative -mt-16 flex flex-col items-center px-8 pb-8">
                     <div className="relative group">
                         <div className="w-32 h-32 rounded-full border-4 border-[#121212] bg-[#1E1E1E] flex items-center justify-center overflow-hidden shadow-2xl">
-                            {form.profilePic ? (
-                                <img src={form.profilePic} alt="Profile" className="w-full h-full object-cover" />
+                            {form?.profilePic ? (
+                                <img src={form?.profilePic} alt="Profile" className="w-full h-full object-cover" />
                             ) : (
                                 <User size={50} className="text-gray-600" />
                             )}

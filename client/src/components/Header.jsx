@@ -9,8 +9,8 @@ const Header = () => {
     const { user } = useSelector(state => state.userReducer)
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const fullName = user?.firstName && user?.lastName ? `${user.firstName.toUpperCase()} ${user.lastName.toUpperCase()}` : 'User';
-    const initial = user?.firstName ? user.firstName[0].toUpperCase() : 'U';
+    const fullName = user?.firstName && user?.lastName ? `${user?.firstName?.toUpperCase()} ${user?.lastName?.toUpperCase()}` : 'User';
+    const initial = user?.firstName ? user?.firstName?.[0]?.toUpperCase() : 'U';
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -38,7 +38,7 @@ const Header = () => {
 
                     <div className="w-10 h-10 rounded-full bg-orange-600 flex items-center justify-center text-white font-bold shadow-lg ring-2 ring-orange-600/20 overflow-hidden">
                         {user?.profilePic ? (
-                            <img src={user.profilePic} alt="Profile" className="w-full h-full object-cover" />
+                            <img src={user?.profilePic} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                             initial
                         )}

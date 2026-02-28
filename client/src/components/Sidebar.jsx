@@ -24,7 +24,7 @@ const Sidebar = () => {
                 <div className="flex items-center space-x-3 overflow-hidden">
                     <div className="w-9 h-9 rounded-full bg-orange-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
                         {user?.profilePic ? (
-                            <img src={user.profilePic} alt="Me" className="w-full h-full rounded-full object-cover" />
+                            <img src={user?.profilePic} alt="Me" className="w-full h-full rounded-full object-cover" />
                         ) : (
                             user?.firstName?.[0] || 'U'
                         )}

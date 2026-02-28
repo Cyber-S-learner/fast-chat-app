@@ -31,7 +31,7 @@ const getAllLoggedInUsers = async (req, res) => {
         }
 
 
-        const allUsers = await User.find({ _id: { $ne: req.user._id } }).select('-__v')
+        const allUsers = await User.find({ _id: { $ne: req?.user?._id } }).select('-__v')
         res.status(200).json({
             message: "All logged in users fetched successfully",
             success: true,
@@ -46,9 +46,9 @@ const getAllLoggedInUsers = async (req, res) => {
 const updateUserProfile = async (req, res) => {
     try {
         const { firstName, lastName } = req.body;
-        const userId = req.user._id;
+        const userId = req?.user?._id;
 
-        let profilePicUrl = req.user.profilePic;
+        let profilePicUrl = req?.user?.profilePic;
 
         if (req.file) {
             // Upload to cloudinary
