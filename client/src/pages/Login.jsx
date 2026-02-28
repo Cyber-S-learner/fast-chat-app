@@ -3,6 +3,7 @@ import { Link, resolvePath, useSearchParams } from 'react-router-dom'
 import { Mail, Lock, Facebook, Chrome } from 'lucide-react'
 import { loginUser } from '../API_Calls/AuthAPI.js'
 import { toast } from 'react-hot-toast'
+import logo from '../assets/fastchat-logo2.png'
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from 'react-redux'
 import { hideLoader, showLoader } from '../redux/loaderSlice.js'
@@ -33,7 +34,7 @@ const Login = () => {
       dispatch(showLoader())
       response = await loginUser(loginDetails)
       dispatch(hideLoader())
-      
+
       if (response?.success) {
         toast.success(response?.message);
         localStorage.setItem('token', response.token)
@@ -41,12 +42,12 @@ const Login = () => {
 
       }
       else {
-        
+
         toast.error(response?.response?.data?.message)
       }
 
     } catch (error) {
-   
+
       dispatch(hideLoader())
 
 
@@ -59,7 +60,7 @@ const Login = () => {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-[#1E1E1E] relative">
       <img
-        src="/src/assets/fastchat-logo2.png"
+        src={logo}
         alt="Fast Chat Logo"
         className="hidden md:block absolute left-2/5 top-[15%] -translate-x-1/2 -translate-y-1/2 rounded-lg w-40 drop-shadow-2xl z-50"
       />
