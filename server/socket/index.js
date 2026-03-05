@@ -2,9 +2,13 @@ import { Server } from "socket.io";
 import { SOCKET_EVENTS } from "./constants.js";
 
 const initSocket = (server) => {
+    const clientOrigin = process.env.CLIENT_URL
+        ? (process.env.CLIENT_URL.startsWith('http') ? process.env.CLIENT_URL : `https://${process.env.CLIENT_URL}`)
+        : "http://localhost:5173";
+
     const io = new Server(server, {
         cors: {
-            origin: process.env.CLIENT_URL || "http://localhost:5173",
+            origin: clientOrigin,
             methods: ["GET", "POST"]
         }
     });

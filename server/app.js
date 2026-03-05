@@ -13,8 +13,14 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const app = express()
+
+// Robust origin validation for split deployment
+const clientOrigin = process.env.CLIENT_URL
+    ? (process.env.CLIENT_URL.startsWith('http') ? process.env.CLIENT_URL : `https://${process.env.CLIENT_URL}`)
+    : "http://localhost:5173";
+
 app.use(cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: clientOrigin,
     credentials: true
 }))
 app.use(express.json())
