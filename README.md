@@ -39,7 +39,7 @@ Fast Chat is a high-performance, real-time messaging application built with the 
 
 ### 1. Clone the repository
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Cyber-S-learner/fast-chat-app.git
 cd Fast-Chat
 ```
 
